@@ -4,13 +4,9 @@ from pydantic import BaseModel, Field
 
 
 class TaskType(str, Enum):
-    SINGLE_IMAGE_VQA = "single_image_vqa"
     CHANGE_ANALYSIS = "change_analysis"
     SCENE_CAPTION = "scene_caption"
-    TEXT_GROUNDING = "text_grounding"
-    OPTICAL_SAR_FUSION = "optical_sar_fusion"
-    METADATA_VALIDATION = "metadata_validation"
-    GEOSPATIAL_VALIDATION = "geospatial_validation"
+    SINGLE_IMAGE_VQA = "single_image_vqa"
 
 
 class TaskStatus(str, Enum):
