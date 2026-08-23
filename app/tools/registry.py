@@ -1,47 +1,37 @@
+from typing import Any
+
+from app.schemas.task import TaskType
 from app.tools.base import BaseTool
+from app.tools.change_analysis import ChangeAnalysisTool
+from app.tools.scene_caption import SceneCaptionTool
+from app.tools.single_image_vqa import SingleImageVQATool
 
 
 class ToolRegistry:
-    """
-    Central registry for all SatQuery analysis tools.
-    """
-
     def __init__(self) -> None:
-        self._tools: dict[str, BaseTool] = {}
+        self._tools: dict[TaskType, BaseTool] = {
+            TaskType.CHANGE_ANALYSIS: ChangeAnalysisTool(),
+            TaskType.SCENE_CAPTION: SceneCaptionTool(),
+            TaskType.SINGLE_IMAGE_VQA: SingleImageVQATool(),
+        }
 
-    def register(self, tool: BaseTool) -> None:
-        """
-        Register a tool using its unique name.
-        """
-        if not tool.name:
-            raise ValueError("Tool must have a non-empty name.")
+    def get_tool(self, task_type: TaskType) -> BaseTool:
+        tool = self._tools.get(task_type)
 
-        if tool.name in self._tools:
-            raise ValueError(f"Tool '{tool.name}' is already registered.")
-
-        self._tools[tool.name] = tool
-
-    def get(self, tool_name: str) -> BaseTool:
-        """
-        Get a registered tool by name.
-        """
-        if tool_name not in self._tools:
-            available = ", ".join(self._tools.keys()) or "none"
-            raise KeyError(
-                f"Tool '{tool_name}' is not registered. "
-                f"Available tools: {available}"
+        if tool is None:
+            raise ValueError(
+                f"No tool registered for task type: {task_type.value}"
             )
 
-        return self._tools[tool_name]
+        return tool
 
     def list_tools(self) -> list[str]:
-        """
-        Return all registered tool names.
-        """
-        return list(self._tools.keys())
+        return [task_type.value for task_type in self._tools]
 
-    def has(self, tool_name: str) -> bool:
-        """
-        Check whether a tool is registered.
-        """
-        return tool_name in self._tools
+    def execute(
+        self,
+        task_type: TaskType,
+        parameters: dict[str, Any],
+    ) -> dict[str, Any]:
+        tool = self.get_tool(task_type)
+        return tool.run(parameters)
