@@ -1,20 +1,12 @@
-from typing import Any
+from typing import Optional
 
 from pydantic import BaseModel, Field
 
 
-class ImageInput(BaseModel):
-    image_id: str | None = None
-    uri: str | None = None
-    metadata: dict[str, Any] = Field(default_factory=dict)
-
-
 class QueryRequest(BaseModel):
-    query: str = Field(
-        ...,
-        min_length=1,
-        description="Natural language remote sensing query",
+    query: str = Field(..., min_length=1, description="User's remote sensing query")
+    image_urls: list[str] = Field(
+        default_factory=list,
+        description="Optional satellite or remote sensing image URLs",
     )
-    session_id: str | None = None
-    images: list[ImageInput] = Field(default_factory=list)
-    metadata: dict[str, Any] = Field(default_factory=dict)
+    session_id: Optional[str] = None
