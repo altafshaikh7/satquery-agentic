@@ -1,5 +1,8 @@
 from fastapi import APIRouter
 
+from app.core.config import settings
+
+
 router = APIRouter()
 
 
@@ -7,5 +10,7 @@ router = APIRouter()
 async def health_check():
     return {
         "status": "healthy",
-        "service": "SatQuery AI",
+        "service": settings.app_name,
+        "version": settings.app_version,
+        "llm_provider": settings.llm_provider,
     }

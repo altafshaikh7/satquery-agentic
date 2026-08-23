@@ -3,6 +3,16 @@ from enum import Enum
 from pydantic import BaseModel, Field
 
 
+class TaskType(str, Enum):
+    SINGLE_IMAGE_VQA = "single_image_vqa"
+    CHANGE_ANALYSIS = "change_analysis"
+    SCENE_CAPTION = "scene_caption"
+    TEXT_GROUNDING = "text_grounding"
+    OPTICAL_SAR_FUSION = "optical_sar_fusion"
+    METADATA_VALIDATION = "metadata_validation"
+    GEOSPATIAL_VALIDATION = "geospatial_validation"
+
+
 class TaskStatus(str, Enum):
     PENDING = "pending"
     RUNNING = "running"
@@ -12,9 +22,8 @@ class TaskStatus(str, Enum):
 
 class Task(BaseModel):
     task_id: str
-    name: str
-    tool_name: str
+    task_type: TaskType
+    description: str
     status: TaskStatus = TaskStatus.PENDING
-    input_data: dict = Field(default_factory=dict)
-    output_data: dict | None = None
-    error: str | None = None
+    dependencies: list[str] = Field(default_factory=list)
+    parameters: dict = Field(default_factory=dict)
