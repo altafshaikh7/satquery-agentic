@@ -4,8 +4,8 @@ from typing import Any
 
 class BaseTool(ABC):
     name: str = "base_tool"
-    description: str = "Base class for SatQuery tools"
+    description: str = "Base tool"
 
     @abstractmethod
     def run(self, parameters: dict[str, Any]) -> dict[str, Any]:
-        raise NotImplementedError
+        pass

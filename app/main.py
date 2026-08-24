@@ -2,6 +2,10 @@ from fastapi import FastAPI
 
 from app.api.routes import health, query, traces
 from app.core.config import settings
+from app.core.logging import setup_logging
+
+
+setup_logging()
 
 app = FastAPI(
     title=settings.app_name,
@@ -13,7 +17,7 @@ app = FastAPI(
 @app.get("/")
 async def root():
     return {
-        "message": "Welcome to SatQuery AI 🚀",
+        "message": "Welcome to SatQuery AI",
         "status": "running",
         "version": settings.app_version,
     }

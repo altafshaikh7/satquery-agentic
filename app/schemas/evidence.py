@@ -1,9 +1,8 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class Evidence(BaseModel):
     evidence_id: str
     source: str
-    claim: str
-    confidence: float = Field(ge=0.0, le=1.0)
-    metadata: dict = Field(default_factory=dict)
+    description: str
+    confidence: float = 0.0

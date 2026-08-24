@@ -11,7 +11,6 @@ class TaskType(str, Enum):
 
 class TaskStatus(str, Enum):
     PENDING = "pending"
-    RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
 
