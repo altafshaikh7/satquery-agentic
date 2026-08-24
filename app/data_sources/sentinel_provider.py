@@ -1,5 +1,6 @@
 import os
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any
 
 import requests
@@ -11,35 +12,50 @@ load_dotenv()
 
 class SentinelProvider:
     """
-    Real Copernicus Data Space Ecosystem provider.
+    Real Sentinel-2 provider for Copernicus Data Space Ecosystem.
 
-    Features:
-    - OAuth2 authentication
-    - Real Sentinel-2 catalog search
-    - Real satellite product metadata retrieval
+    Workflow:
+    1. Get OAuth access token
+    2. Search real Sentinel-2 L2A scenes
+    3. Filter/select lowest-cloud scene
+    4. Use exact acquisition time
+    5. Download a real True Color satellite image
     """
 
     def __init__(self) -> None:
-        self.client_id = os.getenv("CDSE_CLIENT_ID")
-        self.client_secret = os.getenv("CDSE_CLIENT_SECRET")
-
         self.token_url = os.getenv(
             "CDSE_TOKEN_URL",
             "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token",
         )
 
-        self.catalog_url = os.getenv(
-            "CDSE_CATALOG_URL",
-            "https://sh.dataspace.copernicus.eu/catalog/v1/search",
+        self.stac_url = os.getenv(
+            "CDSE_STAC_URL",
+            "https://stac.dataspace.copernicus.eu/v1/search",
         )
+
+        self.process_url = os.getenv(
+            "CDSE_PROCESS_URL",
+            "https://sh.dataspace.copernicus.eu/api/v1/process",
+        )
+
+        self.client_id = os.getenv("CDSE_CLIENT_ID")
+        self.client_secret = os.getenv("CDSE_CLIENT_SECRET")
 
         if not self.client_id or not self.client_secret:
             raise ValueError(
-                "CDSE_CLIENT_ID and CDSE_CLIENT_SECRET are required. "
-                "Add them to the .env file."
+                "CDSE_CLIENT_ID and CDSE_CLIENT_SECRET are missing from .env"
             )
 
+        self._access_token: str | None = None
+
+    # =========================================================
+    # AUTHENTICATION
+    # =========================================================
+
     def get_access_token(self) -> str:
+        if self._access_token:
+            return self._access_token
+
         response = requests.post(
             self.token_url,
             data={
@@ -47,56 +63,205 @@ class SentinelProvider:
                 "client_id": self.client_id,
                 "client_secret": self.client_secret,
             },
-            timeout=30,
+            timeout=60,
         )
 
         response.raise_for_status()
 
-        token_data = response.json()
-        access_token = token_data.get("access_token")
+        data = response.json()
+        token = data.get("access_token")
 
-        if not access_token:
+        if not token:
             raise RuntimeError(
-                f"CDSE authentication failed. Response: {token_data}"
+                f"Access token not received: {data}"
             )
 
-        return access_token
+        self._access_token = token
+        return token
+
+    # =========================================================
+    # SEARCH REAL SENTINEL-2 L2A PRODUCTS
+    # =========================================================
 
     def search_sentinel2(
         self,
         bbox: list[float],
-        start_date: str | None = None,
-        end_date: str | None = None,
-        limit: int = 10,
-        max_cloud_cover: float = 30,
+        limit: int = 20,
+        lookback_days: int = 180,
+        max_cloud_coverage: float = 80.0,
     ) -> list[dict[str, Any]]:
-        """
-        Search real Sentinel-2 imagery.
-
-        bbox format:
-        [min_longitude, min_latitude, max_longitude, max_latitude]
-
-        Example:
-        [73.80, 16.70, 73.90, 16.80]
-        """
 
         if len(bbox) != 4:
             raise ValueError(
-                "bbox must contain 4 values: "
-                "[min_lon, min_lat, max_lon, max_lat]"
+                "bbox must be [min_lon, min_lat, max_lon, max_lat]"
             )
 
-        if start_date is None:
-            start_date = (
-                datetime.now(timezone.utc) - timedelta(days=30)
-            ).strftime("%Y-%m-%dT00:00:00Z")
+        end_date = datetime.now(timezone.utc)
+        start_date = end_date - timedelta(days=lookback_days)
 
-        if end_date is None:
-            end_date = datetime.now(timezone.utc).strftime(
-                "%Y-%m-%dT23:59:59Z"
+        payload = {
+            "collections": ["sentinel-2-l2a"],
+            "bbox": bbox,
+            "datetime": (
+                f"{start_date.strftime('%Y-%m-%dT%H:%M:%SZ')}/"
+                f"{end_date.strftime('%Y-%m-%dT%H:%M:%SZ')}"
+            ),
+            "limit": limit,
+            "query": {
+                "eo:cloud_cover": {
+                    "lte": max_cloud_coverage
+                }
+            },
+        }
+
+        # Current STAC API search
+        response = requests.post(
+            self.stac_url,
+            json=payload,
+            timeout=60,
+        )
+
+        if response.status_code != 200:
+            raise RuntimeError(
+                f"STAC API error {response.status_code}: "
+                f"{response.text}"
             )
+
+        data = response.json()
+        features = data.get("features", [])
+
+        products: list[dict[str, Any]] = []
+
+        for feature in features:
+            products.append(
+                {
+                    "id": feature.get("id"),
+                    "properties": feature.get("properties", {}),
+                    "geometry": feature.get("geometry"),
+                    "bbox": feature.get("bbox"),
+                }
+            )
+
+        return products
+
+    # =========================================================
+    # CLOUD COVER
+    # =========================================================
+
+    @staticmethod
+    def get_cloud_cover(
+        product: dict[str, Any],
+    ) -> float:
+
+        value = product.get(
+            "properties",
+            {},
+        ).get(
+            "eo:cloud_cover",
+            100.0,
+        )
+
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return 100.0
+
+    # =========================================================
+    # PRODUCT DATETIME
+    # =========================================================
+
+    @staticmethod
+    def get_product_datetime(
+        product: dict[str, Any],
+    ) -> str | None:
+
+        properties = product.get(
+            "properties",
+            {},
+        )
+
+        return (
+            properties.get("datetime")
+            or properties.get("start_datetime")
+        )
+
+    # =========================================================
+    # SELECT BEST PRODUCT
+    # =========================================================
+
+    def get_best_sentinel2_product(
+        self,
+        bbox: list[float],
+        lookback_days: int = 180,
+        max_cloud_coverage: float = 80.0,
+    ) -> dict[str, Any] | None:
+
+        products = self.search_sentinel2(
+            bbox=bbox,
+            limit=100,
+            lookback_days=lookback_days,
+            max_cloud_coverage=max_cloud_coverage,
+        )
+
+        if not products:
+            return None
+
+        products.sort(
+            key=self.get_cloud_cover
+        )
+
+        return products[0]
+
+    # =========================================================
+    # CREATE EXACT TIME RANGE
+    # =========================================================
+
+    @staticmethod
+    def create_time_range(
+        product_datetime: str,
+        minutes_before: int = 30,
+        minutes_after: int = 30,
+    ) -> tuple[str, str]:
+
+        dt = datetime.fromisoformat(
+            product_datetime.replace("Z", "+00:00")
+        )
+
+        start_time = dt - timedelta(
+            minutes=minutes_before
+        )
+
+        end_time = dt + timedelta(
+            minutes=minutes_after
+        )
+
+        return (
+            start_time.astimezone(
+                timezone.utc
+            ).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            end_time.astimezone(
+                timezone.utc
+            ).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        )
+
+    # =========================================================
+    # DOWNLOAD REAL TRUE COLOR IMAGE
+    # =========================================================
+
+    def download_true_color_image(
+        self,
+        bbox: list[float],
+        product_datetime: str,
+        output_path: str = "data/best_sentinel2.png",
+        width: int = 1024,
+        height: int = 1024,
+    ) -> str:
 
         token = self.get_access_token()
+
+        start_time, end_time = self.create_time_range(
+            product_datetime
+        )
 
         headers = {
             "Authorization": f"Bearer {token}",
@@ -104,51 +269,143 @@ class SentinelProvider:
         }
 
         payload = {
-            "collections": ["sentinel-2-l2a"],
-            "bbox": bbox,
-            "datetime": f"{start_date}/{end_date}",
-            "limit": limit,
-            "filter": (
-                f"eo:cloud_cover < {max_cloud_cover}"
-            ),
-            "filter-lang": "cql2-text",
+            "input": {
+                "bounds": {
+                    "bbox": bbox,
+                    "properties": {
+                        "crs": "http://www.opengis.net/def/crs/EPSG/0/4326"
+                    },
+                },
+                "data": [
+                    {
+                        "type": "sentinel-2-l2a",
+                        "dataFilter": {
+                            "timeRange": {
+                                "from": start_time,
+                                "to": end_time,
+                            },
+                            "mosaickingOrder": "mostRecent",
+                        },
+                    }
+                ],
+            },
+            "output": {
+                "width": width,
+                "height": height,
+                "responses": [
+                    {
+                        "identifier": "default",
+                        "format": {
+                            "type": "image/png"
+                        },
+                    }
+                ],
+            },
+            "evalscript": """
+//VERSION=3
+
+function setup() {
+    return {
+        input: [{
+            bands: ["B02", "B03", "B04", "dataMask"],
+            units: "REFLECTANCE"
+        }],
+        output: [{
+            id: "default",
+            bands: 3,
+            sampleType: "AUTO"
+        }]
+    };
+}
+
+function evaluatePixel(sample) {
+    if (sample.dataMask === 0) {
+        return [0, 0, 0];
+    }
+
+    let r = Math.min(1, Math.max(0, sample.B04 * 2.5));
+    let g = Math.min(1, Math.max(0, sample.B03 * 2.5));
+    let b = Math.min(1, Math.max(0, sample.B02 * 2.5));
+
+    r = Math.pow(r, 0.65);
+    g = Math.pow(g, 0.65);
+    b = Math.pow(b, 0.65);
+
+    return [r, g, b];
+}
+""",
         }
 
         response = requests.post(
-            self.catalog_url,
+            self.process_url,
             headers=headers,
             json=payload,
-            timeout=60,
+            timeout=180,
         )
 
-        response.raise_for_status()
+        if response.status_code != 200:
+            raise RuntimeError(
+                f"Process API error {response.status_code}: "
+                f"{response.text}"
+            )
 
-        data = response.json()
-        return data.get("features", [])
+        output = Path(output_path)
+        output.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
 
-    def get_latest_sentinel2(
+        output.write_bytes(response.content)
+
+        if output.stat().st_size == 0:
+            raise RuntimeError(
+                "Downloaded image is empty."
+            )
+
+        return str(output)
+
+    # =========================================================
+    # COMPLETE REAL-DATA WORKFLOW
+    # =========================================================
+
+    def download_best_sentinel2_image(
         self,
         bbox: list[float],
-        max_cloud_cover: float = 30,
-    ) -> dict[str, Any] | None:
-        """
-        Return the latest real Sentinel-2 product.
-        """
+        output_path: str = "data/best_sentinel2.png",
+        lookback_days: int = 180,
+        max_cloud_coverage: float = 80.0,
+    ) -> dict[str, Any]:
 
-        features = self.search_sentinel2(
+        product = self.get_best_sentinel2_product(
             bbox=bbox,
-            limit=20,
-            max_cloud_cover=max_cloud_cover,
+            lookback_days=lookback_days,
+            max_cloud_coverage=max_cloud_coverage,
         )
 
-        if not features:
-            return None
+        if not product:
+            raise RuntimeError(
+                "No suitable Sentinel-2 products found."
+            )
 
-        features.sort(
-            key=lambda item: item.get(
-                "properties", {}
-            ).get("datetime", ""),
-            reverse=True,
+        product_datetime = self.get_product_datetime(
+            product
         )
 
-        return features[0]
+        if not product_datetime:
+            raise RuntimeError(
+                "Selected product has no acquisition datetime."
+            )
+
+        image_path = self.download_true_color_image(
+            bbox=bbox,
+            product_datetime=product_datetime,
+            output_path=output_path,
+        )
+
+        return {
+            "product_id": product.get("id"),
+            "datetime": product_datetime,
+            "cloud_cover": self.get_cloud_cover(product),
+            "image_path": image_path,
+            "product": product,
+        }
