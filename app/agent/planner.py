@@ -11,13 +11,7 @@ class TaskPlanner:
         request: QueryRequest,
     ) -> list[Task]:
 
-        # =====================================================
-        # DETECT TASK TYPE
-        # =====================================================
-
-        task_type = self._get_task_type(
-            request
-        )
+        query_lower = request.query.lower().strip()
 
         # =====================================================
         # BASE PARAMETERS
@@ -32,20 +26,40 @@ class TaskPlanner:
         if request.bbox is not None:
             parameters["bbox"] = request.bbox
 
+        tasks: list[Task] = []
+
         # =====================================================
-        # CHANGE ANALYSIS DATE EXTRACTION
+        # DETECT REQUIRED ANALYSES
         # =====================================================
 
-        if task_type == TaskType.CHANGE_ANALYSIS:
+        needs_change_analysis = self._needs_change_analysis(
+            query_lower
+        )
+
+        needs_scene_analysis = self._needs_scene_analysis(
+            query_lower
+        )
+
+        needs_image_vqa = self._needs_image_vqa(
+            request,
+            query_lower,
+        )
+
+        # =====================================================
+        # TASK 1: CHANGE ANALYSIS
+        # =====================================================
+
+        if needs_change_analysis:
+
+            change_parameters = parameters.copy()
 
             dates = self._extract_dates(
                 request.query
             )
 
-            # Extract dates from query
             if len(dates) >= 2:
-                parameters["before_date"] = dates[0]
-                parameters["after_date"] = dates[1]
+                change_parameters["before_date"] = dates[0]
+                change_parameters["after_date"] = dates[1]
 
             # Explicit API dates override extracted dates
             if getattr(
@@ -53,7 +67,7 @@ class TaskPlanner:
                 "before_date",
                 None,
             ):
-                parameters["before_date"] = (
+                change_parameters["before_date"] = (
                     request.before_date
                 )
 
@@ -62,42 +76,113 @@ class TaskPlanner:
                 "after_date",
                 None,
             ):
-                parameters["after_date"] = (
+                change_parameters["after_date"] = (
                     request.after_date
                 )
 
+            tasks.append(
+                Task(
+                    task_id="task_1",
+                    task_type=TaskType.CHANGE_ANALYSIS,
+                    description=(
+                        "Compare satellite observations and "
+                        "detect surface and vegetation changes."
+                    ),
+                    status=TaskStatus.PENDING,
+                    dependencies=[],
+                    parameters=change_parameters,
+                )
+            )
+
         # =====================================================
-        # CREATE TASK
+        # TASK 2: SCENE / LAND COVER ANALYSIS
         # =====================================================
 
-        task = Task(
-            task_id="task_1",
-            task_type=task_type,
-            description=(
-                f"Execute {task_type.value} "
-                "for the given remote sensing query"
-            ),
-            status=TaskStatus.PENDING,
-            dependencies=[],
-            parameters=parameters,
-        )
+        if needs_scene_analysis:
 
-        return [task]
+            scene_parameters = parameters.copy()
+
+            # If change analysis exists, this task will receive
+            # its result through TaskExecutor.
+            dependencies = []
+
+            if needs_change_analysis:
+                dependencies = ["task_1"]
+
+            tasks.append(
+                Task(
+                    task_id=f"task_{len(tasks) + 1}",
+                    task_type=TaskType.SCENE_CAPTION,
+                    description=(
+                        "Analyze the overall Earth Observation "
+                        "scene, including land cover and visible "
+                        "spatial patterns."
+                    ),
+                    status=TaskStatus.PENDING,
+                    dependencies=dependencies,
+                    parameters=scene_parameters,
+                )
+            )
+
+        # =====================================================
+        # TASK 3: SINGLE IMAGE VQA
+        # =====================================================
+
+        if (
+            needs_image_vqa
+            and not needs_change_analysis
+            and not needs_scene_analysis
+        ):
+
+            tasks.append(
+                Task(
+                    task_id=f"task_{len(tasks) + 1}",
+                    task_type=TaskType.SINGLE_IMAGE_VQA,
+                    description=(
+                        "Answer the user's specific question "
+                        "about the provided satellite or aerial "
+                        "image."
+                    ),
+                    status=TaskStatus.PENDING,
+                    dependencies=[],
+                    parameters=parameters.copy(),
+                )
+            )
+
+        # =====================================================
+        # FALLBACK
+        # =====================================================
+
+        if not tasks:
+
+            fallback_type = self._get_task_type(
+                request
+            )
+
+            tasks.append(
+                Task(
+                    task_id="task_1",
+                    task_type=fallback_type,
+                    description=(
+                        f"Execute {fallback_type.value} "
+                        "for the given remote sensing query."
+                    ),
+                    status=TaskStatus.PENDING,
+                    dependencies=[],
+                    parameters=parameters.copy(),
+                )
+            )
+
+        return tasks
 
     # =========================================================
-    # DETECT TASK TYPE
+    # CHANGE ANALYSIS DETECTION
     # =========================================================
 
-    def _get_task_type(
+    def _needs_change_analysis(
         self,
-        request: QueryRequest,
-    ) -> TaskType:
-
-        query_lower = request.query.lower().strip()
-
-        # =====================================================
-        # 1. CHANGE ANALYSIS
-        # =====================================================
+        query: str,
+    ) -> bool:
 
         change_keywords = [
             "change",
@@ -111,47 +196,27 @@ class TaskPlanner:
             "after",
             "between",
             "compared",
+            "increase",
+            "decrease",
+            "gain",
+            "loss",
         ]
 
-        if any(
-            keyword in query_lower
+        return any(
+            keyword in query
             for keyword in change_keywords
-        ):
-            return TaskType.CHANGE_ANALYSIS
+        )
 
-        # =====================================================
-        # 2. SINGLE IMAGE VQA
-        # =====================================================
+    # =========================================================
+    # SCENE ANALYSIS DETECTION
+    # =========================================================
 
-        question_starters = [
-            "is ",
-            "are ",
-            "what ",
-            "where ",
-            "which ",
-            "how ",
-            "can ",
-            "does ",
-            "do ",
-            "did ",
-            "was ",
-            "were ",
-        ]
-
-        if (
-            query_lower.endswith("?")
-            or query_lower.startswith(
-                tuple(question_starters)
-            )
-        ):
-            return TaskType.SINGLE_IMAGE_VQA
-
-        # =====================================================
-        # 3. SCENE CAPTION
-        # =====================================================
+    def _needs_scene_analysis(
+        self,
+        query: str,
+    ) -> bool:
 
         scene_keywords = [
-            "caption",
             "describe",
             "description",
             "scene",
@@ -176,26 +241,70 @@ class TaskPlanner:
             "reservoir",
             "satellite image",
             "remote sensing",
-            "what is visible",
-            "what can you see",
+            "overall",
+            "spatial patterns",
+            "landscape",
         ]
 
-        if any(
-            keyword in query_lower
+        return any(
+            keyword in query
             for keyword in scene_keywords
-        ):
-            return TaskType.SCENE_CAPTION
+        )
 
-        # =====================================================
-        # 4. BBOX DEFAULT
-        # =====================================================
+    # =========================================================
+    # IMAGE VQA DETECTION
+    # =========================================================
+
+    def _needs_image_vqa(
+        self,
+        request: QueryRequest,
+        query: str,
+    ) -> bool:
+
+        if not request.image_urls:
+            return False
+
+        question_starters = [
+            "is ",
+            "are ",
+            "what ",
+            "where ",
+            "which ",
+            "how ",
+            "can ",
+            "does ",
+            "do ",
+            "did ",
+            "was ",
+            "were ",
+        ]
+
+        return (
+            query.endswith("?")
+            or query.startswith(
+                tuple(question_starters)
+            )
+        )
+
+    # =========================================================
+    # FALLBACK TASK TYPE
+    # =========================================================
+
+    def _get_task_type(
+        self,
+        request: QueryRequest,
+    ) -> TaskType:
+
+        if self._needs_change_analysis(
+            request.query.lower()
+        ):
+            return TaskType.CHANGE_ANALYSIS
+
+        if request.image_urls:
+            return TaskType.SINGLE_IMAGE_VQA
 
         if request.bbox is not None:
             return TaskType.SCENE_CAPTION
-
-        # =====================================================
-        # 5. DEFAULT
-        # =====================================================
 
         return TaskType.SINGLE_IMAGE_VQA
 
@@ -213,7 +322,7 @@ class TaskPlanner:
         ] = []
 
         # -----------------------------------------------------
-        # FORMAT: 2025-01-15
+        # FORMAT: YYYY-MM-DD
         # -----------------------------------------------------
 
         iso_pattern = (
@@ -225,15 +334,11 @@ class TaskPlanner:
             query,
         ):
 
-            date_text = match.group()
-
             try:
 
-                parsed_date = (
-                    datetime.strptime(
-                        date_text,
-                        "%Y-%m-%d",
-                    )
+                parsed_date = datetime.strptime(
+                    match.group(),
+                    "%Y-%m-%d",
                 )
 
                 extracted_dates.append(
@@ -305,13 +410,9 @@ class TaskPlanner:
                 match.group(2)
             )
 
-            month = month_mapping[
-                month_name
-            ]
-
             parsed_date = datetime(
                 year,
-                month,
+                month_mapping[month_name],
                 1,
             )
 
