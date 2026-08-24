@@ -3,14 +3,22 @@ from app.llm.mock_provider import MockLLMProvider
 
 
 def get_llm_provider():
-    if settings.llm_provider.lower() == "mock":
+    provider = settings.llm_provider.lower()
+
+    if provider == "mock":
         return MockLLMProvider()
 
-    if settings.llm_provider.lower() == "openai":
+    if provider == "openai":
         from app.llm.openai_provider import OpenAIProvider
 
         return OpenAIProvider()
 
+    if provider == "gemini":
+        from app.llm.gemini_provider import GeminiProvider
+
+        return GeminiProvider()
+
     raise ValueError(
-        f"Unsupported LLM provider: {settings.llm_provider}"
+        f"Unsupported LLM provider: "
+        f"{settings.llm_provider}"
     )

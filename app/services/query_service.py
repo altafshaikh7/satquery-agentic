@@ -19,6 +19,8 @@ class QueryService:
             route=result["route"],
             tasks=result["tasks"],
             results=result["results"],
+            evidence=result["evidence"],
+            verification=result["verification"],
             answer=result["answer"],
             confidence=result["confidence"],
         )

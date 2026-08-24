@@ -7,7 +7,11 @@ class Settings(BaseSettings):
     debug: bool = True
 
     llm_provider: str = "mock"
+
     openai_api_key: str | None = None
+
+    google_api_key: str | None = None
+    gemini_model: str = "gemini-2.5-flash"
 
     model_config = SettingsConfigDict(
         env_file=".env",
