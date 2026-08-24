@@ -1,55 +1,65 @@
-# Virtual Environment
+# =========================
+# Python Virtual Environment
+# =========================
 .venv/
 venv/
 env/
 
-# Python cache
+# =========================
+# Python Cache
+# =========================
 __pycache__/
 *.py[cod]
 *$py.class
 
-# Environment variables / secrets
+# =========================
+# Environment Variables / Secrets
+# =========================
 .env
 .env.*
 !.env.example
 
-# IDE settings
+# =========================
+# IDE Settings
+# =========================
 .vscode/
 .idea/
 
-# Testing
+# =========================
+# Testing / Coverage
+# =========================
 .pytest_cache/
 .coverage
 htmlcov/
 
-# Build files
+# =========================
+# Python Build Files
+# =========================
 build/
 dist/
 *.egg-info/
 
-# OS files
-.DS_Store
-Thumbs.db
+# =========================
+# Frontend / Node
+# =========================
+frontend/node_modules/
+frontend/dist/
 
-# Logs
-*.log
-
-# Local data / uploaded satellite images
+# =========================
+# Generated Satellite Data
+# =========================
 data/*
 !data/.gitkeep
 
-# Temporary files
+# =========================
+# Logs & Temporary Files
+# =========================
+*.log
 *.tmp
 *.temp
 
-.venv/
-__pycache__/
-*.pyc
-.env
-data/uploads/
-
-.env
-.venv/
-__pycache__/
-*.pyc
-data/*.png
+# =========================
+# Operating System Files
+# =========================
+.DS_Store
+Thumbs.db
