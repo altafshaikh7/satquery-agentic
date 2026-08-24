@@ -2,11 +2,6 @@ const API_BASE_URL = "http://127.0.0.1:8000";
 
 const apiClient = {
   async post(endpoint, data) {
-    console.log(
-      "ACTUAL REQUEST BODY:",
-      JSON.stringify(data, null, 2)
-    );
-
     const response = await fetch(
       `${API_BASE_URL}${endpoint}`,
       {
@@ -22,47 +17,56 @@ const apiClient = {
       .json()
       .catch(() => null);
 
-    console.log(
-      "API Response Status:",
-      response.status
-    );
-
-    console.log(
-      "API Response:",
-      responseData
-    );
-
     if (!response.ok) {
-      let errorMessage =
+      const errorMessage =
+        responseData?.detail ||
+        responseData?.message ||
         `Request failed with status ${response.status}`;
 
-      if (typeof responseData?.detail === "string") {
-        errorMessage = responseData.detail;
+      throw new Error(
+        typeof errorMessage === "string"
+          ? errorMessage
+          : JSON.stringify(errorMessage)
+      );
+    }
 
-      } else if (Array.isArray(responseData?.detail)) {
-        errorMessage = responseData.detail
-          .map((error) => {
-            const field =
-              error.loc?.join(" → ") || "Validation";
+    return {
+      data: responseData,
+    };
+  },
 
-            return `${field}: ${error.msg}`;
-          })
-          .join("\n");
+  async upload(endpoint, file) {
+    if (!file) {
+      throw new Error("Please select an image file.");
+    }
 
-      } else if (
-        typeof responseData?.message === "string"
-      ) {
-        errorMessage = responseData.message;
+    const formData = new FormData();
 
-      } else if (responseData?.detail) {
-        errorMessage = JSON.stringify(
-          responseData.detail,
-          null,
-          2
-        );
+    formData.append("file", file);
+
+    const response = await fetch(
+      `${API_BASE_URL}${endpoint}`,
+      {
+        method: "POST",
+        body: formData,
       }
+    );
 
-      throw new Error(errorMessage);
+    const responseData = await response
+      .json()
+      .catch(() => null);
+
+    if (!response.ok) {
+      const errorMessage =
+        responseData?.detail ||
+        responseData?.message ||
+        `Upload failed with status ${response.status}`;
+
+      throw new Error(
+        typeof errorMessage === "string"
+          ? errorMessage
+          : JSON.stringify(errorMessage)
+      );
     }
 
     return {

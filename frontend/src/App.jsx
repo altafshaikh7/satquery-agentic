@@ -2,7 +2,6 @@ import { useState } from "react";
 
 import Header from "./components/common/Header";
 import QueryForm from "./components/query/QueryForm";
-import ExampleQueries from "./components/query/ExampleQueries";
 import ResultsDashboard from "./components/results/ResultsDashboard";
 import Loader from "./components/common/Loader";
 import ErrorMessage from "./components/common/ErrorMessage";
@@ -30,18 +29,14 @@ function App() {
     }
   };
 
-  const handleExampleSelect = (example) => {
-    setSelectedExample(example.query);
-    clearError();
-  };
-
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <Header />
 
       <main className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        {/* Hero Section */}
-        <section className="mb-10 text-center">
+        {/* HERO */}
+
+        <section className="mb-10 text-center sm:mb-12">
           <div className="mx-auto mb-4 inline-flex items-center gap-2 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-4 py-2 text-sm font-medium text-cyan-300">
             Agentic Vision-Language Assistant
           </div>
@@ -55,23 +50,24 @@ function App() {
           </h1>
 
           <p className="mx-auto mt-4 max-w-3xl text-base leading-7 text-slate-400 sm:text-lg">
-            SatQuery AI combines satellite data, geospatial intelligence,
-            and agentic AI to analyze scenes, detect changes, estimate
-            confidence, and provide evidence-backed answers.
+            Upload satellite imagery or ask a geospatial question.
+            SatQuery AI analyzes scenes, detects changes, and provides
+            evidence-backed results.
           </p>
         </section>
 
-        {/* Main Layout */}
-        <section className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_380px]">
-          {/* Left Section */}
-          <div className="space-y-6">
+        {/* MAIN LAYOUT */}
+
+        <section className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px]">
+          {/* LEFT */}
+
+          <div className="min-w-0 space-y-6">
             <QueryForm
               onSubmit={handleSubmit}
               loading={loading}
               initialQuery={selectedExample}
             />
 
-            {/* Error */}
             {error && (
               <ErrorMessage
                 message={error}
@@ -79,15 +75,13 @@ function App() {
               />
             )}
 
-            {/* Loading */}
             {loading && (
               <Loader
                 title="SatQuery is analyzing your request"
-                description="The agent is planning tasks, processing satellite data, and verifying evidence."
+                description="Processing your image, planning analysis tasks, and verifying evidence."
               />
             )}
 
-            {/* Results */}
             {!loading && result && (
               <ResultsDashboard
                 result={result}
@@ -95,36 +89,48 @@ function App() {
             )}
           </div>
 
-          {/* Right Section */}
-          <aside className="space-y-6">
-            <ExampleQueries
-              onSelect={handleExampleSelect}
-            />
+          {/* RIGHT SIDEBAR */}
 
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
+          <aside className="space-y-6">
+            <div className="sticky top-6 rounded-2xl border border-slate-800 bg-slate-900/70 p-6 shadow-lg">
               <h2 className="text-lg font-semibold text-white">
-                SatQuery Capabilities
+                What SatQuery Can Do
               </h2>
 
-              <div className="mt-5 space-y-4">
+              <p className="mt-2 text-sm leading-6 text-slate-400">
+                AI-powered tools for understanding and analyzing
+                satellite and aerial imagery.
+              </p>
+
+              <div className="mt-6 space-y-5">
                 <Capability
+                  number="01"
                   title="Scene Understanding"
-                  description="Describe and interpret objects, terrain, and activities visible in satellite imagery."
+                  description="Identify objects, terrain, land use, and visible activities."
                 />
 
                 <Capability
+                  number="02"
+                  title="Image Analysis"
+                  description="Analyze an uploaded satellite or aerial image using vision AI."
+                />
+
+                <Capability
+                  number="03"
                   title="Change Detection"
-                  description="Compare imagery across time periods and identify meaningful changes."
+                  description="Compare geospatial conditions across different time periods."
                 />
 
                 <Capability
+                  number="04"
                   title="NDVI Analysis"
-                  description="Analyze vegetation conditions and environmental patterns."
+                  description="Evaluate vegetation conditions and environmental patterns."
                 />
 
                 <Capability
+                  number="05"
                   title="Evidence Verification"
-                  description="Generate answers supported by extracted evidence and confidence scores."
+                  description="Support answers with extracted evidence and confidence information."
                 />
               </div>
             </div>
@@ -135,16 +141,26 @@ function App() {
   );
 }
 
-function Capability({ title, description }) {
+function Capability({
+  number,
+  title,
+  description,
+}) {
   return (
-    <div className="border-l-2 border-cyan-500/60 pl-4">
-      <h3 className="font-medium text-slate-200">
-        {title}
-      </h3>
+    <div className="flex gap-4">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-cyan-500/30 bg-cyan-500/10 text-xs font-semibold text-cyan-400">
+        {number}
+      </div>
 
-      <p className="mt-1 text-sm leading-6 text-slate-400">
-        {description}
-      </p>
+      <div>
+        <h3 className="font-medium text-slate-200">
+          {title}
+        </h3>
+
+        <p className="mt-1 text-sm leading-6 text-slate-400">
+          {description}
+        </p>
+      </div>
     </div>
   );
 }
