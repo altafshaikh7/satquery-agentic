@@ -8,13 +8,37 @@ class QueryRouter:
 
         if any(
             word in query
-            for word in ["change", "compare", "difference"]
+            for word in [
+                "change",
+                "compare",
+                "difference",
+                "changed",
+                "change detection",
+            ]
         ):
             return TaskType.CHANGE_ANALYSIS.value
 
         if any(
             word in query
-            for word in ["caption", "describe", "scene"]
+            for word in [
+                "caption",
+                "describe",
+                "scene",
+                "analyze",
+                "analyse",
+                "land use",
+                "land cover",
+                "water body",
+                "water bodies",
+                "vegetation",
+                "forest",
+                "agriculture",
+                "agricultural",
+                "urban",
+                "built-up",
+                "satellite image",
+                "remote sensing",
+            ]
         ):
             return TaskType.SCENE_CAPTION.value
 
